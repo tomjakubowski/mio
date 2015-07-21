@@ -1,7 +1,9 @@
 use io;
 use sys::windows::api;
-use std::{mem, ptr, sync, thread};
+use std::{mem, ptr};
+use std::sync::{self, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread::{self, JoinHandle};
 
 pub struct Rt {
     inner: &'static RtInner,
@@ -13,7 +15,6 @@ impl Rt {
     pub fn global() -> io::Result<Rt> {
         RtInner::global()
             .map(|inner| {
-
                 Rt { inner: inner }
             })
     }
@@ -70,8 +71,23 @@ impl RtInner {
         static INIT: sync::Once = sync::ONCE_INIT;
 
         INIT.call_once(|| {
+            let mut spawn;
+
             unsafe {
-                GLOBAL = Some(RtInner::new().map_err(|e| e.raw_os_error().unwrap()));
+                let inner = RtInner::new();
+
+                spawn = inner.is_ok();
+                GLOBAL = Some(inner.map_err(|e| e.raw_os_error().unwrap()));
+
+                // TODO: Make the worker thread bound to the RtInner instance
+                if spawn {
+                    thread::spawn(|| {
+                        match GLOBAL {
+                            Some(Ok(ref inner)) => inner.init(),
+                            _ => panic!("should not be possible"),
+                        }
+                    });
+                }
             }
         });
 
@@ -140,7 +156,31 @@ impl RtInner {
 
         Ok(())
     }
+
+    /// Runs in the background worker thread and is responsible for dispatching
+    /// IOCP events.
+    fn init(&self) {
+        loop {
+            unsafe {
+                let mut bytes: api::DWORD = mem::uninitialized();
+                let mut key: api::ULONG_PTR = mem::uninitialized();
+                let mut overlapped: *mut api::OVERLAPPED = mem::uninitialized();
+
+                let res = api::GetQueuedCompletionStatus(self.iocp,
+                                                         &mut bytes as api::LPDWORD,
+                                                         &mut key as api::PULONG_PTR,
+                                                         &mut overlapped as *mut api::LPOVERLAPPED,
+                                                         10000);
+
+                assert!(res == api::TRUE);
+
+                println!("GOT EVENT");
+            }
+        }
+    }
 }
 
+/*
 unsafe impl Send for Rt { }
 unsafe impl Sync for Rt { }
+*/
