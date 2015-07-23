@@ -24,6 +24,7 @@ impl Rt {
     }
 }
 
+#[derive(Debug)]
 pub struct Poll {
     inner: &'static RtInner,
 }
@@ -42,7 +43,7 @@ impl Poll {
             })
     }
 
-    fn poll(&self) -> io::Result<()> {
+    pub fn poll(&self) -> io::Result<()> {
         self.inner.poll()
     }
 }
@@ -61,6 +62,7 @@ static mut GLOBAL: Option<Result<RtInner, i32>> = None;
 
 /// Manages the IOCP handle as well as the worker thread that performs the
 /// required polling.
+#[derive(Debug)]
 struct RtInner {
     refs: AtomicUsize,
     iocp: api::HANDLE,
@@ -128,7 +130,7 @@ impl RtInner {
             api::CreateIoCompletionPort(
                 sock as api::HANDLE,
                 self.iocp,
-                0,
+                123,
                 0)
         };
 
@@ -149,7 +151,7 @@ impl RtInner {
                                                      &mut bytes as api::LPDWORD,
                                                      &mut key as api::PULONG_PTR,
                                                      &mut overlapped as *mut api::LPOVERLAPPED,
-                                                     10000);
+                                                     100_000);
 
             assert!(res == api::TRUE);
         }
@@ -162,9 +164,33 @@ impl RtInner {
     fn init(&self) {
         loop {
             unsafe {
+                let mut entries: [api::OVERLAPPED_ENTRY; 128] = mem::zeroed();
+                let mut count: api::ULONG = 0;
+
+                trace!("entering GetQueuedCompletionStatusEx");
+
+                let res = api::GetQueuedCompletionStatusEx(self.iocp,
+                                                           mem::transmute(&mut entries),
+                                                           128,
+                                                           &mut count as api::PULONG,
+                                                           10_000,
+                                                           api::FALSE);
+
+                assert!(res == api::TRUE, "failed to dequeue completion status");
+
+                for i in 0..count {
+                    let status = (*entries[i as usize].lpOverlapped).Internal;
+                    let bytes = (*entries[i as usize].lpOverlapped).InternalHigh;
+                    // trace!("iterating event {}; status={}; bytes={}", i, api::RtlNtStatusToDosError(status as api::c_long), bytes);
+                    trace!("iterating event {}; status={:x}; bytes={}", i, status, bytes);
+                }
+
+                /*
                 let mut bytes: api::DWORD = mem::uninitialized();
                 let mut key: api::ULONG_PTR = mem::uninitialized();
                 let mut overlapped: *mut api::OVERLAPPED = mem::uninitialized();
+
+                trace!("entering GetQueuedCompletionStatus");
 
                 let res = api::GetQueuedCompletionStatus(self.iocp,
                                                          &mut bytes as api::LPDWORD,
@@ -172,15 +198,15 @@ impl RtInner {
                                                          &mut overlapped as *mut api::LPOVERLAPPED,
                                                          10000);
 
-                assert!(res == api::TRUE);
-
-                println!("GOT EVENT");
+                if res == api::TRUE {
+                    // Successful dequeue
+                    trace!("GOT EVENT; bytes={}; key={:?}; overlapped={:?}", bytes, key, overlapped);
+                } else {
+                    // Unsuccessful
+                    trace!("Error; last-error={}; overlapped={:?}", api::GetLastError(), overlapped);
+                }
+                */
             }
         }
     }
 }
-
-/*
-unsafe impl Send for Rt { }
-unsafe impl Sync for Rt { }
-*/

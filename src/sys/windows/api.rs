@@ -13,14 +13,19 @@ pub use winapi::{
     INVALID_HANDLE_VALUE,
     HANDLE,
     LPOVERLAPPED,
+    LPOVERLAPPED_ENTRY,
     LPDWORD,
     LPVOID,
     OVERLAPPED,
+    OVERLAPPED_ENTRY,
     ULONG_PTR,
     PULONG_PTR,
     WORD,
     PVOID,
     TRUE,
+    FALSE,
+    ULONG,
+    PULONG,
 };
 pub use libc::{
     atexit,
@@ -36,6 +41,7 @@ pub use libc::{
     AF_INET6,
     SOCK_STREAM,
     SOCK_DGRAM,
+    c_long,
 };
 pub use libc::consts::os::extra::{
     INVALID_SOCKET,
@@ -142,6 +148,13 @@ extern "system" {
                                      lpOverlapped: *mut LPOVERLAPPED,
                                      dwMilliseconds: DWORD) -> BOOL;
 
+    pub fn GetQueuedCompletionStatusEx(CompletionPort: HANDLE,
+                                       lpCompletionPortEntries: LPOVERLAPPED_ENTRY,
+                                       ulCount: ULONG,
+                                       ulNumEntriesRemoved: PULONG,
+                                       dwMilliseconds: DWORD,
+                                       fAlertable: BOOL) -> BOOL;
+
     fn WSASocketW(af: c_int,
                   kind: c_int,
                   protocol: c_int,
@@ -164,6 +177,12 @@ extern "system" {
 
     pub fn WSACleanup() -> c_int;
 }
+
+/*
+extern "system" {
+    pub fn RtlNtStatusToDosError(Status: c_long) -> ULONG;
+}
+*/
 
 pub fn WSASocket(af: c_int,
                  kind: c_int,

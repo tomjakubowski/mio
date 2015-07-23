@@ -3,9 +3,11 @@ use std::cell::Cell;
 use std::net::SocketAddr;
 use sys::windows::{addr, api, Rt};
 
+/// Implementation details of a TCP socket
 pub struct Socket {
-    sock: api::SOCKET,
     overlapped: api::OVERLAPPED,
+    sock: api::SOCKET,
+    state: SocketState,
     connect_fn: Cell<Option<api::ConnectExFn>>,
 }
 
@@ -14,6 +16,7 @@ impl Socket {
         unsafe {
             Socket {
                 sock: sock,
+                state: SocketState::New,
                 overlapped: mem::zeroed(),
                 connect_fn: Cell::new(None),
             }
@@ -35,6 +38,8 @@ impl Socket {
             if res != 0 {
                 return Err(io::Error::last_os_error());
             }
+
+            trace!("socket ConnectEx; overlapped={:p}", &self.overlapped);
 
             // Issue the connect
             let res = connect_fn(self.sock,
@@ -78,6 +83,12 @@ impl fmt::Debug for Socket {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "Socket {{ ... }}")
     }
+}
+
+enum SocketState {
+    New,
+    Connecting,
+    Connected,
 }
 
 static ANY_IN: api::sockaddr_in = api::sockaddr_in {

@@ -38,16 +38,15 @@ impl TcpSocket {
             return Err(io::Error::last_os_error());
         }
 
+        // Associate the socket with the global IOCP handle
+        let rt = try!(Rt::global());
+        try!(rt.associate_socket(socket));
+
         Ok(TcpSocket { socket: Box::new(Socket::new(socket)) })
     }
 
     pub fn connect(&self, addr: &SocketAddr) -> io::Result<bool> {
-        // TODO: don't initialize here
-        let global = try!(Rt::global());
-
-        try!(self.socket.associate(&global));
         try!(self.socket.connect(addr));
-
         Ok(true)
     }
 

@@ -1,32 +1,21 @@
 use io;
 use event::IoEvent;
 use std::ptr;
-use sys::windows::api::*;
+use sys::windows;
 
 #[derive(Debug)]
 pub struct Selector {
-    iocp: HANDLE,
+    poll: windows::Poll,
 }
 
 impl Selector {
     pub fn new() -> io::Result<Selector> {
-        unsafe {
-            let iocp = CreateIoCompletionPort(
-                INVALID_HANDLE_VALUE,   // FileHandle
-                ptr::null_mut(),        // Existing completion port
-                0,                      // Completion key for this port
-                1);
-
-            if iocp.is_null() {
-                return Err(io::Error::last_os_error());
-            }
-
-            Ok(Selector { iocp: iocp })
-        }
+        let poll = try!(windows::Poll::global());
+        Ok(Selector { poll: poll })
     }
 
-    pub fn select(&mut self, evts: &mut Events, timeout_ms: usize) -> io::Result<()> {
-        unimplemented!();
+    pub fn select(&mut self, events: &mut Events, timeout_ms: usize) -> io::Result<()> {
+        self.poll.poll()
     }
 }
 
@@ -39,7 +28,7 @@ impl Events {
     }
 
     pub fn len(&self) -> usize {
-        unimplemented!();
+        0
     }
 
     pub fn get(&self, idx: usize) -> IoEvent {
